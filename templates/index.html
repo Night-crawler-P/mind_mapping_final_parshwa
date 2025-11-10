@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>House Price Predictor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 House Price Predictor</h1>
+            <p class="subtitle">Predict house prices using Linear Regression</p>
+        </header>
+
+        <main>
+            <div class="content-wrapper">
+                <div class="prediction-section">
+                    <h2>Enter House Details</h2>
+                    <form id="predictionForm">
+                        <div class="form-group">
+                            <label for="size">House Size (sq ft)</label>
+                            <input type="number" id="size" name="size" min="100" max="10000" step="10" required placeholder="e.g., 1500">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bedrooms">Number of Bedrooms</label>
+                            <input type="number" id="bedrooms" name="bedrooms" min="1" max="10" required placeholder="e.g., 3">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="age">House Age (years)</label>
+                            <input type="number" id="age" name="age" min="0" max="100" required placeholder="e.g., 10">
+                        </div>
+
+                        <button type="submit" class="predict-btn">Predict Price</button>
+                    </form>
+
+                    <div id="result" class="result-container" style="display: none;">
+                        <h3>Predicted Price</h3>
+                        <div class="price-display">
+                            <span class="price-amount" id="priceAmount">$0</span>
+                            <span class="price-note">(in thousands: $<span id="priceThousands">0</span>K)</span>
+                        </div>
+                        <div class="prediction-details" id="predictionDetails"></div>
+                    </div>
+
+                    <div id="error" class="error-container" style="display: none;">
+                        <p id="errorMessage"></p>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h2>Model Information</h2>
+                    <div class="metrics-card">
+                        <h3>Model Performance</h3>
+                        <div class="metric">
+                            <span class="metric-label">Training R² Score:</span>
+                            <span class="metric-value">{{ metrics.train_r2 }}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Test R² Score:</span>
+                            <span class="metric-value">{{ metrics.test_r2 }}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Test MSE:</span>
+                            <span class="metric-value">{{ metrics.test_mse }}</span>
+                        </div>
+                    </div>
+
+                    <div class="coefficients-card">
+                        <h3>Model Coefficients</h3>
+                        <div class="coefficient">
+                            <span class="coef-label">Size (sq ft):</span>
+                            <span class="coef-value">{{ metrics.size_coef }}</span>
+                        </div>
+                        <div class="coefficient">
+                            <span class="coef-label">Bedrooms:</span>
+                            <span class="coef-value">{{ metrics.bedrooms_coef }}</span>
+                        </div>
+                        <div class="coefficient">
+                            <span class="coef-label">Age (years):</span>
+                            <span class="coef-value">{{ metrics.age_coef }}</span>
+                        </div>
+                        <div class="coefficient">
+                            <span class="coef-label">Intercept:</span>
+                            <span class="coef-value">{{ metrics.intercept }}</span>
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>How It Works</h3>
+                        <p>The model uses linear regression to predict house prices based on:</p>
+                        <ul>
+                            <li><strong>Size:</strong> Larger houses generally cost more</li>
+                            <li><strong>Bedrooms:</strong> More bedrooms increase the price</li>
+                            <li><strong>Age:</strong> Older houses typically cost less</li>
+                        </ul>
+                        <p class="formula">
+                            Price = {{ metrics.intercept }} + ({{ metrics.size_coef }} × Size) + 
+                            ({{ metrics.bedrooms_coef }} × Bedrooms) + ({{ metrics.age_coef }} × Age)
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Flask & Scikit-learn</p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const size = document.getElementById('size').value;
+            const bedrooms = document.getElementById('bedrooms').value;
+            const age = document.getElementById('age').value;
+            
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+            
+            // Hide previous results
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        size: parseFloat(size),
+                        bedrooms: parseInt(bedrooms),
+                        age: parseInt(age)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Display result
+                    const priceDollars = data.price_dollars.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: 0
+                    });
+                    const priceThousands = data.prediction.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: 2
+                    });
+                    
+                    document.getElementById('priceAmount').textContent = priceDollars;
+                    document.getElementById('priceThousands').textContent = data.prediction;
+                    
+                    const details = `
+                        <p><strong>Input Details:</strong></p>
+                        <ul>
+                            <li>Size: ${data.features.size} sq ft</li>
+                            <li>Bedrooms: ${data.features.bedrooms}</li>
+                            <li>Age: ${data.features.age} years</li>
+                        </ul>
+                    `;
+                    document.getElementById('predictionDetails').innerHTML = details;
+                    resultDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Prediction failed');
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
+
